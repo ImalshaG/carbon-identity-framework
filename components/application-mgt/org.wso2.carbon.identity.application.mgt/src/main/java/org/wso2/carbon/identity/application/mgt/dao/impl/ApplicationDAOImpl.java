@@ -63,6 +63,7 @@ import org.wso2.carbon.identity.application.common.model.RoleV2;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
 import org.wso2.carbon.identity.application.common.model.SpTrustedAppMetadata;
+import org.wso2.carbon.identity.application.common.model.TrustedApp;
 import org.wso2.carbon.identity.application.common.model.User;
 import org.wso2.carbon.identity.application.common.model.script.AuthenticationScriptConfig;
 import org.wso2.carbon.identity.application.common.util.IdentityApplicationManagementUtil;
@@ -3580,13 +3581,13 @@ public class ApplicationDAOImpl extends AbstractApplicationDAOImpl implements Pa
                 storeTrustedAppConfigs.setBoolean(6, trustedAppMetadata.getIsTWAEnabled());
                 storeTrustedAppConfigs.setInt(7, tenantID);
 
-                if (trustedAppMetadata.getAndroidPackageName() != null) {
+                if (StringUtils.isNotBlank(trustedAppMetadata.getAndroidPackageName())) {
                     storeTrustedAppConfigs.setString(2, ANDROID);
                     storeTrustedAppConfigs.setString(3, trustedAppMetadata.getAndroidPackageName());
                     storeTrustedAppConfigs.setString(4, trustedAppMetadata.getAndroidThumbprints());
                     storeTrustedAppConfigs.addBatch();
                 }
-                if (trustedAppMetadata.getAppleAppId() != null) {
+                if (StringUtils.isNotBlank(trustedAppMetadata.getAppleAppId())) {
                     storeTrustedAppConfigs.setString(2, IOS);
                     storeTrustedAppConfigs.setString(3, trustedAppMetadata.getAppleAppId());
                     storeTrustedAppConfigs.setString(4, null);
@@ -6423,5 +6424,37 @@ public class ApplicationDAOImpl extends AbstractApplicationDAOImpl implements Pa
         loggedInUser = UserCoreUtil.addTenantDomainToEntry(loggedInUser, tenantDomain);
 
         AUDIT_LOG.info(String.format(AUDIT_MESSAGE, loggedInUser, action, data, result));
+    }
+
+    public List<TrustedApp> getTrustedApps(String platformType) throws IdentityApplicationManagementException {
+
+        if (log.isDebugEnabled()) {
+            log.debug("Getting trusted app details for platform type: " + platformType);
+        }
+
+        List<TrustedApp> trustedApps = new ArrayList<>();
+
+        try (Connection connection = IdentityDatabaseUtil.getDBConnection(false);
+             PreparedStatement statement = connection.prepareStatement(
+                     ApplicationMgtDBQueries.LOAD_TRUSTED_APPS_BY_PLATFORM_TYPE)) {
+            statement.setString(1, platformType);
+            statement.execute();
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    TrustedApp app = new TrustedApp();
+                    app.setPlatformType(platformType);
+                    app.setAppIdentifier(resultSet.getString(1));
+                    app.setThumbprints(resultSet.getString(2));
+                    app.setIsFIDOTrusted(resultSet.getBoolean(3));
+                    app.setIsTWAEnabled(resultSet.getBoolean(4));
+                    trustedApps.add(app);
+                }
+            }
+        } catch (SQLException e) {
+            String msg = "Error occurred while retrieving trusted app list for %s platform.";
+            throw new IdentityApplicationManagementException(String.format(msg, platformType), e);
+        }
+        return trustedApps;
     }
 }

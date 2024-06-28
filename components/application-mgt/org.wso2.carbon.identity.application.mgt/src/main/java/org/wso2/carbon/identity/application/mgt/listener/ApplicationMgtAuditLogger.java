@@ -36,12 +36,17 @@ import org.wso2.carbon.identity.application.common.model.Property;
 import org.wso2.carbon.identity.application.common.model.RoleMapping;
 import org.wso2.carbon.identity.application.common.model.ServiceProvider;
 import org.wso2.carbon.identity.application.common.model.ServiceProviderProperty;
+import org.wso2.carbon.identity.application.common.model.SpTrustedAppMetadata;
+import org.wso2.carbon.identity.application.mgt.ApplicationMgtUtil;
 import org.wso2.carbon.identity.central.log.mgt.utils.LoggerUtils;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 import org.wso2.carbon.user.core.util.UserCoreUtil;
 import org.wso2.carbon.utils.CarbonUtils;
 
+import static org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants.ANDROID_PACKAGE_NAME_PROPERTY_NAME;
+import static org.wso2.carbon.identity.application.common.util.IdentityApplicationConstants.APPLE_APP_ID_PROPERTY_NAME;
 import static org.wso2.carbon.identity.application.mgt.ApplicationMgtUtil.getUsernameWithUserTenantDomain;
+import static org.wso2.carbon.identity.application.mgt.ApplicationMgtUtil.isTrustedAppConsentGranted;
 
 /**
  * Audit log implementation for Application (Service Provider) changes.
@@ -76,6 +81,10 @@ public class ApplicationMgtAuditLogger extends AbstractApplicationMgtListener {
         String initiator = getInitiatorForLog(userName, tenantDomain);
         String data = buildData(serviceProvider);
         audit.info(String.format(AUDIT_MESSAGE, initiator, "Add-Application", appId, data, SUCCESS));
+        if (isTrustedAppConsentGranted(serviceProvider)) {
+            audit.info(String.format(AUDIT_MESSAGE, initiator, "Add-Application", appId,
+                    buildTrustedAppData(serviceProvider), SUCCESS));
+        }
         return true;
     }
 
@@ -88,6 +97,10 @@ public class ApplicationMgtAuditLogger extends AbstractApplicationMgtListener {
         String data = buildData(serviceProvider);
 
         audit.info(String.format(AUDIT_MESSAGE, initiator, "Update-Application", appId, data, SUCCESS));
+        if (ApplicationMgtUtil.isTrustedAppConsentUpdatedToGranted(serviceProvider, tenantDomain)) {
+            audit.info(String.format(AUDIT_MESSAGE, initiator, "Update-Application", appId,
+                    buildTrustedAppData(serviceProvider), SUCCESS));
+        }
         return true;
     }
 
@@ -365,5 +378,20 @@ public class ApplicationMgtAuditLogger extends AbstractApplicationMgtListener {
             }
         }
         return LoggerUtils.getMaskedContent(username);
+    }
+
+    private String buildTrustedAppData(ServiceProvider serviceProvider) {
+
+        StringBuilder data = new StringBuilder();
+        data.append("TrustedAppConsent: Trusted app consent granted for the application: ").append(
+                serviceProvider.getApplicationName()).append(", ");
+        SpTrustedAppMetadata trustedAppMetadata = serviceProvider.getTrustedAppMetadata();
+        if (trustedAppMetadata != null) {
+            data.append("IsFidoTrusted").append(trustedAppMetadata.getIsFidoTrusted()).append(", ");
+            data.append(ANDROID_PACKAGE_NAME_PROPERTY_NAME).append(trustedAppMetadata.getAndroidPackageName()).append(", ");
+            data.append("androidThumbprints").append(trustedAppMetadata.getAndroidThumbprints()).append(", ");
+            data.append(APPLE_APP_ID_PROPERTY_NAME).append(trustedAppMetadata.getAppleAppId());
+        }
+        return data.toString();
     }
 }
